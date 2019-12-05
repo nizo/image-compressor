@@ -38,7 +38,13 @@ SET /a originalSizeTotal=0
 SET /a optimizedSizeTotal=0
 SET /a optimizationStarted=0
 
-for %%i in ("%~1"*.jpg "%~1"*.png) do (
+rem for /D /R %%i in ("%~1*\*.jpg" "%~1*\*.png") do (
+
+for /R %%f in (./) do echo %%f
+
+for /R /D %%i in (*.jpg) do (
+rem for /R /D "%~1" %%i in (*.jpg *.png) do (
+
 	if /I "!optimizationStarted!" EQU "0" (
 		echo ====================
 		echo OPTIMIZATION STARTED
