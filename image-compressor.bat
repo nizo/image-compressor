@@ -2,15 +2,42 @@
 SETLOCAL ENABLEEXTENSIONS
 SETLOCAL ENABLEDELAYEDEXPANSION
 
+rem %1 input directory
+rem %2 output directory, defaults to input current
+
+if "%~1"=="" (
+	echo No input directory provided
+) else (
+	if exist "%~1" (
+		goto setOutputDirectory
+	) else (
+		echo Input directory is invalid
+	)
+)
+goto quit
+
+
+:setOutputDirectory
+if "%~2"=="" (
+	SET destinationDirectory=%~1
+	echo Output directory is missing, files will be overwritten
+	rem pause
+) else (
+	if exist "%~2" (
+		SET destinationDirectory=%~2
+	) else (
+		mkdir %2
+		SET destinationDirectory=%~2
+	)
+)
+goto compress
+
+:compress
 SET /a originalSizeTotal=0
 SET /a optimizedSizeTotal=0
-SET destinationFolder=optimized
 SET /a optimizationStarted=0
 
-if not exist "%destinationFolder%" mkdir "%destinationFolder%"
-
-
-for %%i in (*.jpg *.png) do (
+for %%i in ("%~1"*.jpg "%~1"*.png) do (
 	if /I "!optimizationStarted!" EQU "0" (
 		echo ====================
 		echo OPTIMIZATION STARTED
@@ -20,14 +47,14 @@ for %%i in (*.jpg *.png) do (
 	)
 
 	SET /a originalSize=%%~zi
-	SET optimizedFile=%%~dpi%destinationFolder%\%%~nxi
+	SET optimizedFile="%destinationDirectory%%%~nxi"
 
 	if /I "%%~xi" EQU ".jpg" (
-		cjpeg-static.exe -quality 75 %%i > !optimizedFile!
+		%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !optimizedFile!
 	)
 
 	if /I "%%~xi" EQU ".png" (
-		pngquant.exe %%i --force --quality=45-85 --output !optimizedFile!
+		%~dp0/libs/pngquant.exe %%i --force --quality=45-85 --output !optimizedFile!
 	)
 
 	for %%a in (!optimizedFile!) do (
@@ -56,3 +83,7 @@ if /I "!originalSizeTotal!" NEQ "0" (
 	echo SIZE REDUCED BY !savedInKB! kB ^(!savedInPercentTotal! %%^)
 	echo ==============================
 )
+
+
+:quit
+echo.
