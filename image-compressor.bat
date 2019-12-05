@@ -20,8 +20,9 @@ goto quit
 :setOutputDirectory
 if "%~2"=="" (
 	SET destinationDirectory=%~1
+	SET overwriteFiles=1
 	echo Output directory is missing, files will be overwritten
-	rem pause
+	pause
 ) else (
 	if exist "%~2" (
 		SET destinationDirectory=%~2
@@ -49,12 +50,26 @@ for %%i in ("%~1"*.jpg "%~1"*.png) do (
 	SET /a originalSize=%%~zi
 	SET optimizedFile="%destinationDirectory%%%~nxi"
 
-	if /I "%%~xi" EQU ".jpg" (
-		%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !optimizedFile!
-	)
+	if /I "!overwriteFiles!" EQU "1" (
+		SET tempFile="%destinationDirectory%%%~ni_tmp%%~xi"
+		if /I "%%~xi" EQU ".jpg" (
+			%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !tempFile!
+		)
 
-	if /I "%%~xi" EQU ".png" (
-		%~dp0/libs/pngquant.exe %%i --force --quality=45-85 --output !optimizedFile!
+		if /I "%%~xi" EQU ".png" (
+			%~dp0/libs/pngquant.exe "%%i" --force --quality=45-85 --output !tempFile!
+		)
+
+		copy /Y !tempFile! !optimizedFile! >nul
+		del /F !tempFile!
+	) else (
+		if /I "%%~xi" EQU ".jpg" (
+			%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !optimizedFile!
+		)
+
+		if /I "%%~xi" EQU ".png" (
+			%~dp0/libs/pngquant.exe %%i --force --quality=45-85 --output !optimizedFile!
+		)
 	)
 
 	for %%a in (!optimizedFile!) do (
