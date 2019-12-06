@@ -4,12 +4,17 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 
 rem %1 input directory
 rem %2 output directory, defaults to input current
+rem %3 jpeg quality, default is 75
 
 if "%~1"=="" (
 	echo No input directory provided
 ) else (
 	if exist "%~1" (
-		goto setOutputDirectory
+		if "%~n1" NEQ "" (
+			echo Single file compression is not supported
+		) else (
+			goto setOutputDirectory
+		)
 	) else (
 		echo Input directory is invalid
 	)
@@ -18,18 +23,22 @@ goto quit
 
 
 :setOutputDirectory
-if "%~2"=="" (
+if exist "%~2" (
+	SET destinationDirectory=%~2
+	if "!destinationDirectory!" EQU "%~2" (
+		SET /a overwriteFiles=1
+		echo Input and output directories are the same, files will be overwritten
+		SET /P continue=Press enter to continue . . .
+	)
+
+) else (
 	SET destinationDirectory=%~1
 	SET overwriteFiles=1
-	echo Output directory is missing, files will be overwritten
-	pause
-) else (
-	if exist "%~2" (
-		SET destinationDirectory=%~2
-	) else (
-		mkdir %2
-		SET destinationDirectory=%~2
-	)
+	echo Output directory is not defined, files in the input directory will be overwritten
+	set /P continue=Press enter to continue . . .
+
+	rem mkdir %2
+	rem  SET destinationDirectory=%~2
 )
 goto compress
 
@@ -37,29 +46,34 @@ goto compress
 SET /a originalSizeTotal=0
 SET /a optimizedSizeTotal=0
 SET /a optimizationStarted=0
+SET /a counter = 1
+SET /a jpegQuality=75
+if exist "%~3" (
+	SET /a jpegQuality=%~3
+)
 
-rem for /D /R %%i in ("%~1*\*.jpg" "%~1*\*.png") do (
+rem change working directory to the input and process files
+SET currentDirectory=%~dp0
+cd %1
 
-for /R %%f in (./) do echo %%f
 
-for /R /D %%i in (*.jpg) do (
-rem for /R /D "%~1" %%i in (*.jpg *.png) do (
+echo.
+for /R %%i in (*.jpg *.png) do (
 
 	if /I "!optimizationStarted!" EQU "0" (
-		echo ====================
+		echo ==============================
 		echo OPTIMIZATION STARTED
-		echo ====================
+		echo ==============================
 
 		SET /a optimizationStarted=1
 	)
 
 	SET /a originalSize=%%~zi
-	SET optimizedFile="%destinationDirectory%%%~nxi"
-
 	if /I "!overwriteFiles!" EQU "1" (
-		SET tempFile="%destinationDirectory%%%~ni_tmp%%~xi"
+		SET optimizedFile="%%~pi%%~nxi"
+		SET tempFile="%%~pi%%~nxi.__tmp"
 		if /I "%%~xi" EQU ".jpg" (
-			%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !tempFile!
+			%~dp0/libs/cjpeg-static.exe -quality !jpegQuality! "%%i" > !tempFile!
 		)
 
 		if /I "%%~xi" EQU ".png" (
@@ -69,8 +83,9 @@ rem for /R /D "%~1" %%i in (*.jpg *.png) do (
 		copy /Y !tempFile! !optimizedFile! >nul
 		del /F !tempFile!
 	) else (
+		SET optimizedFile="%destinationDirectory%%%~nxi"
 		if /I "%%~xi" EQU ".jpg" (
-			%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !optimizedFile!
+			%~dp0/libs/cjpeg-static.exe -quality !jpegQuality! "%%i" > !optimizedFile!
 		)
 
 		if /I "%%~xi" EQU ".png" (
@@ -89,7 +104,8 @@ rem for /R /D "%~1" %%i in (*.jpg *.png) do (
 	SET /a savedInPercent=^(!savedInPercent!/!originalSize!^)
 	SET /a savedInPercent=^(100 - !savedInPercent!^)
 
-	echo %%~nxi reduced by ^(!savedInPercent! %%^)
+	echo !counter!  %%~nxi reduced by ^(!savedInPercent! %%^)
+	set /a counter=^(!counter!+1^)
 )
 
 if /I "!originalSizeTotal!" NEQ "0" (
@@ -99,12 +115,10 @@ if /I "!originalSizeTotal!" NEQ "0" (
 	SET /a savedInKB=^(!originalSizeTotal!-!optimizedSizeTotal!^)
 	SET /a savedInKB=^(!savedInKB!/1000^)
 
-	echo.
 	echo ==============================
 	echo SIZE REDUCED BY !savedInKB! kB ^(!savedInPercentTotal! %%^)
 	echo ==============================
 )
-
 
 :quit
 echo.
