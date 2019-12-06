@@ -23,21 +23,22 @@ if "%~1"=="" (
 goto quit
 
 :setOutputDirectory
-if exist "%~2" (
-	SET destinationDirectory=%~2
+
+if "%~2" NEQ "" (
 	if "!destinationDirectory!" EQU "%~1" (
 		SET /a overwriteFiles=1
 		echo Input and output directories are the same, files will be overwritten
 		SET /P continue=Press enter to continue . . .
 	)
+	if not exist "%~2" (
+		mkdir "%~2"
+	)
+	SET destinationDirectory=%~2
 ) else (
 	SET destinationDirectory=%~1
 	SET overwriteFiles=1
 	echo Output directory is not defined, files in the input directory will be overwritten
 	set /P continue=Press enter to continue . . .
-
-	rem mkdir %2
-	rem  SET destinationDirectory=%~2
 )
 goto compress
 
