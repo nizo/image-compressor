@@ -4,7 +4,6 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 
 rem %1 input directory
 rem %2 output directory, defaults to input current
-rem %3 jpeg quality, default is 75
 
 if "%~1"=="" (
 	echo No input directory provided
@@ -47,10 +46,6 @@ SET /a originalSizeTotal=0
 SET /a optimizedSizeTotal=0
 SET /a optimizationStarted=0
 SET /a counter = 1
-SET /a jpegQuality=75
-if exist "%~3" (
-	SET /a jpegQuality=%~3
-)
 
 rem change working directory to the input and process files
 SET currentDirectory=%~dp0
@@ -73,7 +68,7 @@ for /R %%i in (*.jpg *.png) do (
 		SET optimizedFile="%%~pi%%~nxi"
 		SET tempFile="%%~pi%%~nxi.__tmp"
 		if /I "%%~xi" EQU ".jpg" (
-			%~dp0/libs/cjpeg-static.exe -quality !jpegQuality! "%%i" > !tempFile!
+			%~dp0/libs/cjpeg-static.exe -quality 75 "%%i" > !tempFile!
 		)
 
 		if /I "%%~xi" EQU ".png" (
