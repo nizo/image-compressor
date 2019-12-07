@@ -5,24 +5,33 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 rem %1 input directory
 rem %2 output directory, defaults to input current
 
-SET /a jpgQuality=75
-rem SET inputDirectory=%~dp1
-SET inputFileName=%~n1
+set /a jpgQuality=75
 
-
-rem extract absolute path of the input directory
+rem extract absolute paths from the input directory
 pushd .
 cd %~dp0
-SET inputDirectory=%~f1
+set inputDirectory=%~f1
+set inputFileName=%~n1
+set inputFileExtension=%~x1
+set singleFileConversion=0
 popd
-echo %inputDirectory%
 
 if "%inputDirectory%"=="" (
 	echo No input directory provided
 ) else (
 	if exist "%inputDirectory%" (
-		if "%inputFilename%" NEQ "" (
-			echo Single file compression is not supported
+		if "%inputFileName%" NEQ "" (
+			set extensionSupported=0
+			if "%inputFileExtension%" EQU ".jpg" set extensionSupported=1
+			if "%inputFileExtension%" EQU ".png" set extensionSupported=1
+
+			if "!extensionSupported!" EQU "1" (
+				set /a singleFileConversion=1
+				goto setOutputDirectory
+			) else (
+				echo Extension %inputFileExtension% is not supported
+				goto quit
+			)
 		) else (
 			goto setOutputDirectory
 		)
@@ -33,109 +42,124 @@ if "%inputDirectory%"=="" (
 goto quit
 
 :setOutputDirectory
+	if "%~2" NEQ "" (
+		set outputDirectory=%~dp2
+		if "!outputDirectory!" EQU "!inputDirectory!" (
+			set /a overwriteFiles=1
+			echo Input and output directories are the same, files will be overwritten
+			set /P continue=Press enter to continue . . .
+		)
+		if not exist "!outputDirectory!" (
+			mkdir "!outputDirectory!"
+		)
 
-if "%~2" NEQ "" (
-	SET outputDirectory=%~dp2
-	if "!outputDirectory!" EQU "!inputDirectory!" (
-		SET /a overwriteFiles=1
-		echo Input and output directories are the same, files will be overwritten
-		SET /P continue=Press enter to continue . . .
+	) else (
+		set outputDirectory=%inputDirectory%
+		set overwriteFiles=1
+		echo Output directory is not defined, files in the input directory will be overwritten
+		set /P continue=Press enter to continue . . .
 	)
-	if not exist "!outputDirectory!" (
-		mkdir "!outputDirectory!"
-	)
-
-) else (
-	SET outputDirectory=%inputDirectory%
-	SET overwriteFiles=1
-	echo Output directory is not defined, files in the input directory will be overwritten
-	set /P continue=Press enter to continue . . .
-)
-goto compress
+	goto compress
 
 :compress
+	set /a inputSizeTotal=0
+	set /a outputSizeTotal=0
+	set /a optimizationStarted=0
+	set /a counter = 1
 
-SET /a inputSizeTotal=0
-SET /a outputSizeTotal=0
-SET /a optimizationStarted=0
-SET /a counter = 1
+	rem change working directory to the input and process files
+	set currentDirectory=%~dp0
+	cd %1
 
-rem change working directory to the input and process files
-SET currentDirectory=%~dp0
-cd %1
+	echo.
 
-echo.
+	if "!singleFileConversion!" EQU "1" (
+		call :optimizeFile !inputDirectory!
 
-rem echo START %time%
-for /R %%i in (*.jpg *.png) do (
-	if /I "!optimizationStarted!" EQU "0" (
-		echo ==============================
-		echo OPTIMIZATION STARTED
-		echo ==============================
+	) else (
+		for /R %%i in (*.jpg *.png) do (
+			if /I "!optimizationStarted!" EQU "0" (
+				echo ==============================
+				echo OPTIMIZATION STARTED
+				echo ==============================
 
-		SET /a optimizationStarted=1
+				set /a optimizationStarted=1
+			)
+			call :optimizeFile %%i
+		)
 	)
 
-	SET /a inputFileSize=%%~zi
+	goto summary
+
+:optimizeFile
+	set /a inputFileSize=%~z1
 	if /I "!overwriteFiles!" EQU "1" (
-		SET outputFile="%%~pi%%~nxi"
-		SET tempFile="%%~pi%%~nxi.__tmp"
+		set outputFile="%~p1%~nx1"
+		set tempFile="%~p1%~nx1.__tmp"
 	) else (
 		rem // Save current directory and change to target directory
-		SET currentFileInputDirectory=%%~dpi
-		SET currentFileOutputDirectory=!currentFileInputDirectory:%inputDirectory%=%outputDirectory%!
-		SET outputFile=!currentFileOutputDirectory!%%~nxi
-		SET tempFile=!currentFileOutputDirectory!%%~nxi.__tmp
+		set currentFileInputDirectory=%~dp1
+		set currentFileOutputDirectory=!currentFileInputDirectory:%inputDirectory%=%outputDirectory%!
+		set outputFile=!currentFileOutputDirectory!%~nx1
+		set tempFile=!currentFileOutputDirectory!%~nx1.__tmp
 
 		if not exist "!currentFileOutputDirectory!" (
 			mkdir !currentFileOutputDirectory!>nul
 		)
 	)
-
-	if /I "%%~xi" EQU ".jpg" (
-		%~dp0/bin/cjpeg-static.exe -quality !jpgQuality! "%%i" > !tempFile!
+	if /I "%~x1" EQU ".jpg" (
+		%~dp0/bin/cjpeg-static.exe -quality !jpgQuality! "%1" > !tempFile!
 	)
 
-	if /I "%%~xi" EQU ".png" (
-		%~dp0/bin/pngquant.exe "%%i" --force --quality=45-85 --output !tempFile!
+	if /I "%~x1" EQU ".png" (
+		%~dp0/bin/pngquant.exe "%1" --force --quality=45-85 --output !tempFile!
 	)
 
 	for %%a in (!tempFile!) do (
 		set /a tempFileSize=%%~za
 	)
+	set /a inputSizeTotal=^(!inputSizeTotal!+!inputFileSize!^)
 
 	if "!tempFileSize!" NEQ "0" (
 		if "!tempFileSize!" LSS "!inputFileSize!" (
 			copy /Y !tempFile! !outputFile! >nul
-			del /F !tempFile!
-			SET /a outputSizeTotal=^(!outputSizeTotal!+!tempFileSize!^)
-			SET /a inputSizeTotal=^(!inputSizeTotal!+!inputFileSize!^)
 
-			SET /a savedInPercent=^(!tempFileSize!*100^)
-			SET /a savedInPercent=^(!savedInPercent!/!inputFileSize!^)
-			SET /a savedInPercent=^(100 - !savedInPercent!^)
+			set /a outputSizeTotal=^(!outputSizeTotal!+!tempFileSize!^)
+			set /a saveInKb=^(!inputFileSize!-!tempFileSize!^)
+			set /a saveInKb=^(!saveInKb!/1000^)
+			set /a savedInPercent=^(!tempFileSize!*100^)
+			set /a savedInPercent=^(!savedInPercent!/!inputFileSize!^)
+			set /a savedInPercent=^(100 - !savedInPercent!^)
 
-			echo !counter!  %%~nxi reduced by ^(!savedInPercent! %%^)
+			echo !counter!  %~nx1 reduced by !saveInKb! kB ^(!savedInPercent! %%^)
 			set /a counter=^(!counter!+1^)
 		)
+
 	) else (
-		echo [101;93mOUTPUT SIZE IS 0 [0m
+		echo [101;93mERROR OCCURED [0m
 	)
-)
 
-if /I "!inputSizeTotal!" NEQ "0" (
-	SET /a savedInPercentTotal=^(!outputSizeTotal!*100^)
-	SET /a savedInPercentTotal=^(!savedInPercentTotal!/!inputSizeTotal!^)
-	SET /a savedInPercentTotal=^(100 - !savedInPercentTotal!^)
-	SET /a savedInKB=^(!inputSizeTotal!-!outputSizeTotal!^)
-	SET /a savedInKB=^(!savedInKB!/1000^)
+	del /F !tempFile!
+	exit /b
 
-	echo ==============================
-	echo SIZE REDUCED BY !savedInKB! kB ^(!savedInPercentTotal! %%^)
-	echo ==============================
 
-	rem	echo END %time%
-)
+:summary
+	if /I "!inputSizeTotal!" NEQ "0" (
+		set /a savedInPercentTotal=^(!outputSizeTotal!*100^)
+		set /a savedInPercentTotal=^(!savedInPercentTotal!/!inputSizeTotal!^)
+		set /a savedInPercentTotal=^(100 - !savedInPercentTotal!^)
+
+		set /a savedInKBTotal=^(!inputSizeTotal!-!outputSizeTotal!^)
+		set /a savedInKBTotal=^(!savedInKBTotal!/1000^)
+
+		echo ==============================
+		echo SIZE REDUCED BY !savedInKBTotal! kB ^(!savedInPercentTotal! %%^)
+		echo ==============================
+
+		rem	echo END %time%
+	)
 
 :quit
-echo.
+	echo.
+
+
