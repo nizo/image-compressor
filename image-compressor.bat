@@ -4,8 +4,8 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 
 rem %1 input directory
 rem %2 output directory, defaults to input current
-
-set /a jpgQuality=75
+rem image-compressor.bat ./input ./output --q75
+rem image-compressor.bat ./input --q75
 
 rem extract absolute paths from the input directory
 pushd .
@@ -13,14 +13,34 @@ cd %~dp0
 set inputDirectory=%~f1
 set inputFileName=%~n1
 set inputFileExtension=%~x1
+set outputDirectory=%~dp2
 set singleFileConversion=0
+set extractedJpgQuality=""
+set /a jpgQuality=75
 popd
+
 
 if "%inputDirectory%"=="" (
 	echo No input directory provided
 ) else (
 	if exist "%inputDirectory%" (
+		if "%2" NEQ "" (
+			call :extractJpgQuality %2
+			if !extractedJpgQuality! NEQ "" (
+				set /a jpgQuality=!extractedJpgQuality!
+				set outputDirectory=
+			)
+		)
+		if "%3" NEQ "" (
+			call :extractJpgQuality %3
+			if !extractedJpgQuality! NEQ "" (
+				set /a jpgQuality=!extractedJpgQuality!
+			)
+		)
+
 		if "%inputFileName%" NEQ "" (
+			rem Single file optimization
+
 			set extensionSupported=0
 			if "%inputFileExtension%" EQU ".jpg" set extensionSupported=1
 			if "%inputFileExtension%" EQU ".png" set extensionSupported=1
@@ -33,6 +53,7 @@ if "%inputDirectory%"=="" (
 				goto quit
 			)
 		) else (
+			rem Directory optimization
 			goto setOutputDirectory
 		)
 	) else (
@@ -41,9 +62,29 @@ if "%inputDirectory%"=="" (
 )
 goto quit
 
+:extractJpgQuality
+	set candidate=%1
+	set extractedJpgQuality=""
+	if "!candidate:~0,3!" EQU "--q" (
+		set rawJpgQuality=!candidate:--q=!
+		if !rawJpgQuality! EQU +!rawJpgQuality! (
+			if !rawJpgQuality! GTR 100 (
+				set /a rawJpgQuality=100
+			)
+			if !rawJpgQuality! LSS 0 (
+				set /a rawJpgQuality=0
+			)
+			set /a extractedJpgQuality=!rawJpgQuality!
+		) else (
+			echo JPEG quality parameter is invalid, try "image-compressor.bat ./input --q75"
+			goto quit
+		)
+	)
+	exit /b
+
 :setOutputDirectory
-	if "%~2" NEQ "" (
-		set outputDirectory=%~dp2
+	if "!outputDirectory!" NEQ "" (
+		rem Set output directory/create directory
 		if "!outputDirectory!" EQU "!inputDirectory!" (
 			set /a overwriteFiles=1
 			echo Input and output directories are the same, files will be overwritten
@@ -54,6 +95,7 @@ goto quit
 		)
 
 	) else (
+		rem No output directory is specified, overwrite input
 		set outputDirectory=%inputDirectory%
 		set overwriteFiles=1
 		echo Output directory is not defined, files in the input directory will be overwritten
@@ -80,7 +122,7 @@ goto quit
 		for /R %%i in (*.jpg *.png) do (
 			if /I "!optimizationStarted!" EQU "0" (
 				echo ==============================
-				echo OPTIMIZATION STARTED
+				echo OPTIMIZATION STARTED ^(quality !jpgQuality!^)
 				echo ==============================
 
 				set /a optimizationStarted=1
@@ -125,15 +167,22 @@ goto quit
 			copy /Y !tempFile! !outputFile! >nul
 
 			set /a outputSizeTotal=^(!outputSizeTotal!+!tempFileSize!^)
-			set /a saveInKb=^(!inputFileSize!-!tempFileSize!^)
-			set /a saveInKb=^(!saveInKb!/1000^)
+			set /a savedInKB=^(!inputFileSize!-!tempFileSize!^)
+			set /a savedInKB=^(!savedInKB!/1000^)
 			set /a savedInPercent=^(!tempFileSize!*100^)
 			set /a savedInPercent=^(!savedInPercent!/!inputFileSize!^)
 			set /a savedInPercent=^(100 - !savedInPercent!^)
 
-			echo !counter!  %~nx1 reduced by !saveInKb! kB ^(!savedInPercent! %%^)
-			set /a counter=^(!counter!+1^)
+			echo !counter!  %~nx1 reduced by !savedInKB! kB ^(!savedInPercent! %%^)
+		) else (
+			rem original is more of lower filesize
+			set /a outputSizeTotal=^(!outputSizeTotal!+!inputFileSize!^)
+			if /I "!overwriteFiles!" NEQ "1" (
+				copy /Y %1 !outputFile! >nul
+			)
+			echo !counter!  %~nx1 - Optimized file is bigger than original, not replacing
 		)
+		set /a counter=^(!counter!+1^)
 
 	) else (
 		echo [101;93mERROR OCCURED [0m
