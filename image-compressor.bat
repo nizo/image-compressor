@@ -7,18 +7,23 @@ rem %2 output directory, defaults to input current
 rem image-compressor.bat ./input ./output --q75
 rem image-compressor.bat ./input --q75
 
-rem extract absolute paths from the input directory
+
+rem save input directory
 pushd .
 cd %~dp0
 set inputDirectory=%~f1
 set inputFileName=%~n1
 set inputFileExtension=%~x1
-set outputDirectory=%~dp2
 set singleFileConversion=0
 set extractedJpgQuality=""
 set /a jpgQuality=75
 popd
 
+rem save output directory
+pushd .
+cd %~dp0
+set outputDirectory=%~f2
+popd
 
 if "%inputDirectory%"=="" (
 	echo No input directory provided
@@ -163,7 +168,7 @@ goto quit
 	set /a inputSizeTotal=^(!inputSizeTotal!+!inputFileSize!^)
 
 	if "!tempFileSize!" NEQ "0" (
-		if "!tempFileSize!" LSS "!inputFileSize!" (
+		if !tempFileSize! LSS !inputFileSize! (
 			copy /Y !tempFile! !outputFile! >nul
 
 			set /a outputSizeTotal=^(!outputSizeTotal!+!tempFileSize!^)
@@ -175,7 +180,7 @@ goto quit
 
 			echo !counter!  %~nx1 reduced by !savedInKB! kB ^(!savedInPercent! %%^)
 		) else (
-			rem original is more of lower filesize
+			rem original is more efficient than optimized
 			set /a outputSizeTotal=^(!outputSizeTotal!+!inputFileSize!^)
 			if /I "!overwriteFiles!" NEQ "1" (
 				copy /Y %1 !outputFile! >nul
