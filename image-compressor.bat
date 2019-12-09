@@ -4,8 +4,12 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 
 rem %1 input directory
 rem %2 output directory, defaults to input current
+rem --webp, forces conversion to webp format
+rem --q100, sets quality of compression, 0-100
+
 rem image-compressor.bat ./input ./output --q75
 rem image-compressor.bat ./input --q75
+rem image-compressor.bat ./input --webp
 
 
 rem save input directory
@@ -15,36 +19,18 @@ set inputDirectory=%~f1
 set inputFileName=%~n1
 set inputFileExtension=%~x1
 set singleFileConversion=0
-set extractedJpgQuality=""
-set /a jpgQuality=75
+set /a quality=75
+set forceWebp=0
 popd
 
-rem save output directory
-pushd .
-cd %~dp0
-set outputDirectory=%~f2
-popd
+call :extractParameters %*
 
 if "%inputDirectory%"=="" (
 	echo No input directory provided
 ) else (
 	if exist "%inputDirectory%" (
-		if "%2" NEQ "" (
-			call :extractJpgQuality %2
-			if !extractedJpgQuality! NEQ "" (
-				set /a jpgQuality=!extractedJpgQuality!
-				set outputDirectory=
-			)
-		)
-		if "%3" NEQ "" (
-			call :extractJpgQuality %3
-			if !extractedJpgQuality! NEQ "" (
-				set /a jpgQuality=!extractedJpgQuality!
-			)
-		)
-
 		if "%inputFileName%" NEQ "" (
-			rem Single file optimization
+			rem single file optimization
 
 			set extensionSupported=0
 			if "%inputFileExtension%" EQU ".jpg" set extensionSupported=1
@@ -58,7 +44,7 @@ if "%inputDirectory%"=="" (
 				goto quit
 			)
 		) else (
-			rem Directory optimization
+			rem directory optimization
 			goto setOutputDirectory
 		)
 	) else (
@@ -67,23 +53,50 @@ if "%inputDirectory%"=="" (
 )
 goto quit
 
-:extractJpgQuality
-	set candidate=%1
-	set extractedJpgQuality=""
-	if "!candidate:~0,3!" EQU "--q" (
-		set rawJpgQuality=!candidate:--q=!
-		if !rawJpgQuality! EQU +!rawJpgQuality! (
-			if !rawJpgQuality! GTR 100 (
-				set /a rawJpgQuality=100
+:extractParameters
+	set parameterIndex=0
+	for %%x in (%*) do (
+		set parameter=%%x
+		rem extract output directory
+		if "!parameterIndex!" EQU "1" (
+			if "!parameter:~0,2!" NEQ "--" (
+				pushd .
+				cd %~dp0
+				set outputDirectory=%~f2
+				echo !outputDirectory!
+				popd
 			)
-			if !rawJpgQuality! LSS 0 (
-				set /a rawJpgQuality=0
-			)
-			set /a extractedJpgQuality=!rawJpgQuality!
-		) else (
-			echo JPEG quality parameter is invalid, try "image-compressor.bat ./input --q75"
-			goto quit
 		)
+
+		rem extract quality
+		if "!parameter:~0,3!" EQU "--q" (
+			call :setQuality !parameter:--q=!
+		)
+
+		rem extract quality
+		if "!parameter:~0,6!" EQU "--webp" (
+			set /a forceWebp=1
+		)
+
+		set /a parameterIndex+=1
+	)
+
+	goto quit
+	exit /b
+
+:setQuality
+	set rawQuality=%1
+	if !rawQuality! EQU +!rawQuality! (
+		if !rawQuality! GTR 100 (
+			set /a rawQuality=100
+		)
+		if !rawQuality! LSS 0 (
+			set /a rawQuality=0
+		)
+		set /a quality=!rawQuality!
+	) else (
+		echo quality parameter is invalid, try "image-compressor.bat ./input --q75"
+		goto quit
 	)
 	exit /b
 
@@ -127,7 +140,7 @@ goto quit
 		for /R %%i in (*.jpg *.png) do (
 			if /I "!optimizationStarted!" EQU "0" (
 				echo ==============================
-				echo OPTIMIZATION STARTED ^(quality !jpgQuality!^)
+				echo OPTIMIZATION STARTED ^(quality !quality!^)
 				echo ==============================
 
 				set /a optimizationStarted=1
@@ -147,19 +160,26 @@ goto quit
 		rem // Save current directory and change to target directory
 		set currentFileInputDirectory=%~dp1
 		set currentFileOutputDirectory=!currentFileInputDirectory:%inputDirectory%=%outputDirectory%!
-		set outputFile=!currentFileOutputDirectory!%~nx1
-		set tempFile=!currentFileOutputDirectory!%~nx1.__tmp
 
 		if not exist "!currentFileOutputDirectory!" (
 			mkdir !currentFileOutputDirectory!>nul
 		)
 	)
-	if /I "%~x1" EQU ".jpg" (
-		%~dp0/bin/cjpeg-static.exe -quality !jpgQuality! "%1" > !tempFile!
-	)
 
-	if /I "%~x1" EQU ".png" (
-		%~dp0/bin/pngquant.exe "%1" --force --quality=45-85 --output !tempFile!
+	if "!forceWebp!" EQU "1" (
+		set tempFile=!currentFileOutputDirectory!webp.__tmp
+		set outputFile=!currentFileOutputDirectory!%~n1.webp
+		%~dp0/bin/cwebp.exe -quiet -q !quality! "%1" -o !tempFile!
+	) else (
+		set tempFile=!currentFileOutputDirectory!%~nx1.__tmp
+		set outputFile=!currentFileOutputDirectory!%~nx1
+		if /I "%~x1" EQU ".jpg" (
+			%~dp0/bin/cjpeg-static.exe -quality !quality! "%1" > !tempFile!
+		)
+
+		if /I "%~x1" EQU ".png" (
+			%~dp0/bin/pngquant.exe "%1" --force --quality=45-85 --output !tempFile!
+		)
 	)
 
 	for %%a in (!tempFile!) do (
